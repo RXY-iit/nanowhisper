@@ -51,6 +51,18 @@ impl RecordingMode {
 
 struct RecordingModeState(Mutex<RecordingMode>);
 
+#[cfg(target_os = "macos")]
+#[derive(Clone, Copy, Debug)]
+struct FocusTarget {
+    pid: i32,
+}
+
+#[cfg(not(target_os = "macos"))]
+#[derive(Clone, Copy, Debug)]
+struct FocusTarget;
+
+struct FocusRestoreState(Mutex<Option<FocusTarget>>);
+
 /// Returns (x, y, width, height) of the screen containing the cursor,
 /// in logical coordinates with top-left origin.
 pub fn cursor_screen_bounds(app_handle: &tauri::AppHandle) -> (f64, f64, f64, f64) {
@@ -196,6 +208,7 @@ pub fn run() {
             let recorder = Arc::new(AudioRecorder::new());
             app.manage(recorder.clone());
             app.manage(RecordingModeState(Mutex::new(RecordingMode::Transcribe)));
+            app.manage(FocusRestoreState(Mutex::new(None)));
 
             // Initialize shared HTTP client
             let http_client = reqwest::Client::new();
@@ -446,6 +459,7 @@ fn start_recording(app_handle: &tauri::AppHandle, mode: RecordingMode) {
     if let Ok(mut current_mode) = app_handle.state::<RecordingModeState>().0.lock() {
         *current_mode = mode;
     }
+    remember_focus_target(app_handle);
 
     let saved = settings::get_settings();
     let (sx, sy, sw, sh) = cursor_screen_bounds(app_handle);
@@ -480,10 +494,10 @@ fn start_recording(app_handle: &tauri::AppHandle, mode: RecordingMode) {
     .accept_first_mouse(true)
     .build()
     {
-        Ok(w) => {
+        Ok(_w) => {
             log::info!("Overlay window created");
             #[cfg(target_os = "macos")]
-            macos_set_overlay_all_spaces(app_handle, w);
+            macos_set_overlay_all_spaces(app_handle, _w);
         }
         Err(e) => log::error!("Failed to create overlay: {}", e),
     }
@@ -499,6 +513,7 @@ fn start_recording(app_handle: &tauri::AppHandle, mode: RecordingMode) {
         return;
     }
     log::info!("Recording started");
+    restore_focus_target(app_handle);
 
     // Register Escape only while recording
     register_escape(app_handle);
@@ -641,6 +656,7 @@ fn stop_and_transcribe(app_handle: &tauri::AppHandle) {
                 let _ = handle.clipboard().write_text(&processed.output_text);
                 // Close overlay first so the previously active app regains focus
                 close_overlay(&handle);
+                restore_focus_target(&handle);
                 // Paste on a dedicated OS thread — must NOT run on tokio
                 let paste_handle = handle.clone();
                 std::thread::spawn(move || {
@@ -735,3 +751,69 @@ fn close_overlay(app_handle: &tauri::AppHandle) {
         let _ = w.close();
     }
 }
+
+fn remember_focus_target(app_handle: &tauri::AppHandle) {
+    if let Ok(mut slot) = app_handle.state::<FocusRestoreState>().0.lock() {
+        *slot = capture_focus_target();
+    }
+}
+
+fn restore_focus_target(app_handle: &tauri::AppHandle) {
+    let target = app_handle
+        .state::<FocusRestoreState>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|slot| *slot);
+    restore_captured_focus(target);
+}
+
+#[cfg(target_os = "macos")]
+fn capture_focus_target() -> Option<FocusTarget> {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+
+    unsafe {
+        let workspace: *mut AnyObject = msg_send![AnyClass::get(c"NSWorkspace")?, sharedWorkspace];
+        if workspace.is_null() {
+            return None;
+        }
+        let app: *mut AnyObject = msg_send![workspace, frontmostApplication];
+        if app.is_null() {
+            return None;
+        }
+        let pid: i32 = msg_send![app, processIdentifier];
+        Some(FocusTarget { pid })
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn capture_focus_target() -> Option<FocusTarget> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn restore_captured_focus(target: Option<FocusTarget>) {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+
+    let Some(target) = target else {
+        return;
+    };
+
+    std::thread::sleep(Duration::from_millis(50));
+    let _ = std::panic::catch_unwind(move || unsafe {
+        let app_cls = AnyClass::get(c"NSRunningApplication");
+        let Some(app_cls) = app_cls else {
+            return;
+        };
+        let app: *mut AnyObject = msg_send![app_cls, runningApplicationWithProcessIdentifier: target.pid];
+        if app.is_null() {
+            return;
+        }
+        let _: bool = msg_send![app, activateWithOptions: 1u64];
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn restore_captured_focus(_target: Option<FocusTarget>) {}
