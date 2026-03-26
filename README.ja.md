@@ -9,13 +9,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jicaiinc/nanowhisper/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/jicaiinc/nanowhisper?style=flat-square&color=1c1c1e"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/jicaiinc/nanowhisper?style=flat-square&color=1c1c1e&cacheSeconds=1"></a>
+  <a href="https://github.com/RXY-iit/nanowhisper/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/RXY-iit/nanowhisper?style=flat-square&color=1c1c1e"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/RXY-iit/nanowhisper?style=flat-square&color=1c1c1e&cacheSeconds=1"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-333?style=flat-square">
 </p>
 
 <p align="center">
-  <a href="https://github.com/jicaiinc/nanowhisper/releases/latest">ダウンロード</a>
+  <a href="https://github.com/RXY-iit/nanowhisper/releases/latest">ダウンロード</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.28">v0.1.28 リリース</a>
 </p>
 
 <p align="center">

@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NanoWhisper</title>
+    <meta
+      name="description"
+      content="NanoWhisper is a minimal desktop speech-to-text app with translate mode and modify mode for macOS, Windows, and Linux."
+    />
+    <style>
+      :root {
+        --bg: #f4efe6;
+        --panel: rgba(255, 252, 246, 0.84);
+        --ink: #161513;
+        --muted: #5f584e;
+        --line: rgba(22, 21, 19, 0.1);
+        --accent: #1f6feb;
+        --accent-strong: #114fb3;
+        --warm: #c96c43;
+        --shadow: 0 20px 60px rgba(30, 22, 12, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(201, 108, 67, 0.18), transparent 28%),
+          radial-gradient(circle at 80% 20%, rgba(31, 111, 235, 0.16), transparent 24%),
+          linear-gradient(180deg, #f7f2e8 0%, #efe7db 100%);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 36px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .brand-mark {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--warm), var(--accent));
+        box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.42);
+      }
+
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .nav-link,
+      .button,
+      .button-secondary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+      }
+
+      .nav-link {
+        padding: 10px 14px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.48);
+        border: 1px solid rgba(255, 255, 255, 0.7);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+        gap: 24px;
+        align-items: stretch;
+        margin-bottom: 28px;
+      }
+
+      .hero-copy,
+      .hero-card,
+      .section {
+        backdrop-filter: blur(14px);
+        background: var(--panel);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        box-shadow: var(--shadow);
+      }
+
+      .hero-copy {
+        border-radius: 32px;
+        padding: 36px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        margin-bottom: 16px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(31, 111, 235, 0.08);
+        color: var(--accent-strong);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 14px;
+        font-size: clamp(42px, 6vw, 74px);
+        line-height: 0.98;
+        letter-spacing: -0.04em;
+      }
+
+      .subtitle {
+        max-width: 700px;
+        margin: 0 0 28px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.6;
+      }
+
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 22px;
+      }
+
+      .button,
+      .button-secondary {
+        min-height: 48px;
+        padding: 0 18px;
+        font-weight: 700;
+      }
+
+      .button {
+        background: var(--ink);
+        color: #fffdf9;
+      }
+
+      .button-secondary {
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      .button:hover,
+      .button-secondary:hover,
+      .nav-link:hover {
+        transform: translateY(-1px);
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .meta-chip {
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.6);
+        font-size: 14px;
+      }
+
+      .hero-card {
+        border-radius: 32px;
+        padding: 28px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .hero-card::before {
+        content: "";
+        position: absolute;
+        inset: 16px;
+        border-radius: 24px;
+        background:
+          linear-gradient(160deg, rgba(201, 108, 67, 0.18), transparent 42%),
+          linear-gradient(210deg, rgba(31, 111, 235, 0.18), transparent 54%);
+        border: 1px solid rgba(22, 21, 19, 0.06);
+      }
+
+      .card-shell {
+        position: relative;
+        z-index: 1;
+      }
+
+      .card-label {
+        margin-bottom: 14px;
+        color: var(--muted);
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .card-row {
+        margin-bottom: 14px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.74);
+        border: 1px solid rgba(22, 21, 19, 0.08);
+      }
+
+      .card-title {
+        margin-bottom: 8px;
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .card-text {
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .sections {
+        display: grid;
+        gap: 18px;
+      }
+
+      .section {
+        border-radius: 28px;
+        padding: 28px;
+      }
+
+      .section h2 {
+        margin: 0 0 16px;
+        font-size: 28px;
+        letter-spacing: -0.03em;
+      }
+
+      .grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .feature,
+      .download,
+      .doc-link {
+        padding: 18px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.58);
+        border: 1px solid var(--line);
+      }
+
+      .feature strong,
+      .download strong,
+      .doc-link strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      .feature p,
+      .download p,
+      .doc-link p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 14px;
+      }
+
+      .download-grid,
+      .doc-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .footer {
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .grid,
+        .download-grid,
+        .doc-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-copy,
+        .hero-card,
+        .section {
+          border-radius: 24px;
+          padding: 22px;
+        }
+
+        .nav {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <nav class="nav">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <span>NanoWhisper</span>
+        </div>
+        <div class="nav-links">
+          <a class="nav-link" href="https://github.com/RXY-iit/nanowhisper">GitHub</a>
+          <a class="nav-link" href="https://github.com/RXY-iit/nanowhisper/releases/latest">Latest Release</a>
+          <a class="nav-link" href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.28">v0.1.28</a>
+        </div>
+      </nav>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow">Desktop Speech To Text</div>
+          <h1>Pure Whisper. Now with translate and rewrite modes.</h1>
+          <p class="subtitle">
+            NanoWhisper is a minimal desktop speech-to-text app for macOS, Windows, and Linux.
+            Press a shortcut, speak, and paste text back into the app you were already using.
+          </p>
+          <div class="cta-row">
+            <a class="button" href="https://github.com/RXY-iit/nanowhisper/releases/latest">Download Latest</a>
+            <a class="button-secondary" href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.28">Open v0.1.28</a>
+            <a class="button-secondary" href="https://github.com/RXY-iit/nanowhisper">View Source</a>
+          </div>
+          <div class="meta">
+            <span class="meta-chip">macOS</span>
+            <span class="meta-chip">Windows</span>
+            <span class="meta-chip">Linux</span>
+            <span class="meta-chip">Tauri v2</span>
+            <span class="meta-chip">OpenAI + Gemini</span>
+          </div>
+        </div>
+
+        <aside class="hero-card">
+          <div class="card-shell">
+            <div class="card-label">What&apos;s New</div>
+            <div class="card-row">
+              <div class="card-title">Translate Mode</div>
+              <div class="card-text">
+                Default shortcut: <strong>Ctrl+T</strong>. Record once and paste both the transcript and the translation with automatic line breaks.
+              </div>
+            </div>
+            <div class="card-row">
+              <div class="card-title">Modify Mode</div>
+              <div class="card-text">
+                Default shortcut: <strong>Ctrl+O</strong>. Select text, speak your instruction, and replace the original selection in place.
+              </div>
+            </div>
+            <div class="card-row">
+              <div class="card-title">Focus Restore</div>
+              <div class="card-text">
+                Recording now tries to preserve the original typing target so paste returns to the previous app and caret position more reliably.
+              </div>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <div class="sections">
+        <section class="section">
+          <h2>Core Features</h2>
+          <div class="grid">
+            <article class="feature">
+              <strong>One Shortcut</strong>
+              <p>Start and stop recording with a global hotkey. No extra navigation, no large UI.</p>
+            </article>
+            <article class="feature">
+              <strong>Auto-Paste</strong>
+              <p>Transcribed or rewritten text goes straight back to the active application.</p>
+            </article>
+            <article class="feature">
+              <strong>History</strong>
+              <p>All results are stored locally with audio files, so you can retry later with a different model.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Downloads</h2>
+          <div class="download-grid">
+            <a class="download" href="https://github.com/RXY-iit/nanowhisper/releases/latest">
+              <strong>Latest Release</strong>
+              <p>Open the newest release page and download the installer that matches your OS.</p>
+            </a>
+            <a class="download" href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.28">
+              <strong>v0.1.28</strong>
+              <p>Open the current tagged release directly.</p>
+            </a>
+            <div class="download">
+              <strong>macOS</strong>
+              <p>Use the DMG that matches your Mac architecture: Apple Silicon or Intel.</p>
+            </div>
+            <div class="download">
+              <strong>Windows / Linux</strong>
+              <p>Use the EXE or MSI on Windows, and DEB, RPM, or AppImage on Linux.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Documentation</h2>
+          <div class="doc-grid">
+            <a class="doc-link" href="https://github.com/RXY-iit/nanowhisper/blob/main/README.md">
+              <strong>English README</strong>
+              <p>Main documentation, features, and source build instructions.</p>
+            </a>
+            <a class="doc-link" href="https://github.com/RXY-iit/nanowhisper/blob/main/README.zh.md">
+              <strong>简体中文</strong>
+              <p>中文说明、功能概览和使用方式。</p>
+            </a>
+            <a class="doc-link" href="https://github.com/RXY-iit/nanowhisper/blob/main/README.ja.md">
+              <strong>日本語</strong>
+              <p>日本語の説明、機能一覧、導入方法。</p>
+            </a>
+            <a class="doc-link" href="https://github.com/RXY-iit/nanowhisper/actions/workflows/release.yml">
+              <strong>Release Workflow</strong>
+              <p>See release automation, build status, and generated artifacts.</p>
+            </a>
+          </div>
+        </section>
+      </div>
+
+      <p class="footer">
+        To publish this page, enable GitHub Pages for the <code>main</code> branch and the <code>/docs</code> folder in repository settings.
+      </p>
+    </main>
+  </body>
+</html>
