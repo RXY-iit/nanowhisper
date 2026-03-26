@@ -239,10 +239,10 @@ jobs:
       - name: Build Tauri app (macOS, signed)
         if: runner.os == 'macOS' && steps.signing.outputs.mode == 'signed'
         env:
-          APPLE_SIGNING_IDENTITY: Developer ID Application: Jicai, Inc. (NDX2ZZ8U2R)
+          APPLE_SIGNING_IDENTITY: "Developer ID Application: Jicai, Inc. (NDX2ZZ8U2R)"
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: NDX2ZZ8U2R
+          APPLE_TEAM_ID: "NDX2ZZ8U2R"
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build --target ${{ matrix.target }}
