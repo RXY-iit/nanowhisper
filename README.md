@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  English | <a href="README.zh.md">简体中文</a>
+  English | <a href="README.zh.md">简体中文</a> | <a href="README.ja.md">日本語</a>
 </p>
 
 ---
@@ -38,9 +38,17 @@ Powered by OpenAI Whisper API and Google Gemini API. Built with Tauri v2.
 
 - **One Shortcut** — Global hotkey to start/stop recording. No UI to navigate.
 - **Auto-Paste** — Transcribed text goes straight to your cursor. No copy needed.
+- **Translate Mode** — Press `Ctrl+T` to record, then paste both the transcript and translated text with an automatic line break.
+- **Modify Mode** — Press `Ctrl+O`, select existing text, press again, and replace the original selection with the rewritten result.
 - **Waveform Overlay** — Minimal always-on-top visualizer while recording.
 - **History** — All transcriptions saved locally with audio files for retry.
 - **System Tray** — Runs quietly in the background.
+
+## New in v0.1.26
+
+- Added `Translate Mode` with default shortcut `Ctrl+T`
+- Added `Modify Mode` with default shortcut `Ctrl+O`
+- Added multilingual README support including Japanese
 
 ## Build from Source
 
