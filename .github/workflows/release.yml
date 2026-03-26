@@ -236,32 +236,44 @@ jobs:
           Write-Host "Signing wrapper created"
 
       # ── Platform-specific builds ────────────────────────────────
-      - name: Build Tauri app (macOS)
-        if: runner.os == 'macOS'
+      - name: Build Tauri app (macOS, signed)
+        if: runner.os == 'macOS' && steps.signing.outputs.mode == 'signed'
         env:
-          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.mode == 'signed' && 'Developer ID Application: Jicai, Inc. (NDX2ZZ8U2R)' || '' }}
-          APPLE_ID: ${{ steps.signing.outputs.mode == 'signed' && secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ steps.signing.outputs.mode == 'signed' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ steps.signing.outputs.mode == 'signed' && 'NDX2ZZ8U2R' || '' }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: Developer ID Application: Jicai, Inc. (NDX2ZZ8U2R)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: NDX2ZZ8U2R
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build --target ${{ matrix.target }}
 
-      - name: Build Tauri app (Windows)
-        if: runner.os == 'Windows'
-        env:
-          AZURE_CLIENT_ID: ${{ steps.signing.outputs.mode == 'signed' && secrets.AZURE_CLIENT_ID || '' }}
-          AZURE_CLIENT_SECRET: ${{ steps.signing.outputs.mode == 'signed' && secrets.AZURE_CLIENT_SECRET || '' }}
-          AZURE_TENANT_ID: ${{ steps.signing.outputs.mode == 'signed' && secrets.AZURE_TENANT_ID || '' }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+      - name: Build Tauri app (macOS, unsigned)
+        if: runner.os == 'macOS' && steps.signing.outputs.mode != 'signed'
         run: npx tauri build --target ${{ matrix.target }}
 
-      - name: Build Tauri app (Linux)
-        if: runner.os == 'Linux'
+      - name: Build Tauri app (Windows, signed)
+        if: runner.os == 'Windows' && steps.signing.outputs.mode == 'signed'
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target ${{ matrix.target }}
+
+      - name: Build Tauri app (Windows, unsigned)
+        if: runner.os == 'Windows' && steps.signing.outputs.mode != 'signed'
+        run: npx tauri build --target ${{ matrix.target }}
+
+      - name: Build Tauri app (Linux, signed)
+        if: runner.os == 'Linux' && steps.signing.outputs.mode == 'signed'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target ${{ matrix.target }}
+
+      - name: Build Tauri app (Linux, unsigned)
+        if: runner.os == 'Linux' && steps.signing.outputs.mode != 'signed'
         run: npx tauri build --target ${{ matrix.target }}
 
       # ── DMG post-processing ─────────────────────────────────────
