@@ -55,7 +55,7 @@ Powered by OpenAI Whisper API and Google Gemini API. Built with Tauri v2.
 Prerequisites: [Node.js](https://nodejs.org/) and [Rust](https://rustup.rs/).
 
 ```bash
-git clone https://github.com/jicaiinc/nanowhisper.git
+git clone https://github.com/RXY-iit/nanowhisper.git
 cd nanowhisper
 npm install
 npm run tauri dev
@@ -69,5 +69,5 @@ npm run tauri dev
 
 <p align="center">
   纯粹的语音转文字，仅此而已。<br>
-  <sub>&copy; 2025 <a href="https://github.com/jicaiinc">Jicai, Inc.</a></sub>
+  <sub>&copy; 2025 <a href="https://github.com/RXY-iit">RXY-iit</a></sub>
 </p>

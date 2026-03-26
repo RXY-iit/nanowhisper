@@ -55,7 +55,7 @@ OpenAI Whisper API と Google Gemini API を利用し、Tauri v2 で構築され
 前提条件: [Node.js](https://nodejs.org/) と [Rust](https://rustup.rs/)
 
 ```bash
-git clone https://github.com/jicaiinc/nanowhisper.git
+git clone https://github.com/RXY-iit/nanowhisper.git
 cd nanowhisper
 npm install
 npm run tauri dev
@@ -69,5 +69,5 @@ npm run tauri dev
 
 <p align="center">
   Pure Whisper. Nothing else.<br>
-  <sub>&copy; 2025 <a href="https://github.com/jicaiinc">Jicai, Inc.</a></sub>
+  <sub>&copy; 2025 <a href="https://github.com/RXY-iit">RXY-iit</a></sub>
 </p>
