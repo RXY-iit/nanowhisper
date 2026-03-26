@@ -47,10 +47,8 @@
         }
       }
     },
-    "windows": {
-      "signCommand": "nanowhisper-sign.cmd %1"
-    },
-    "createUpdaterArtifacts": true
+    "windows": {},
+    "createUpdaterArtifacts": false
   },
   "plugins": {
     "updater": {

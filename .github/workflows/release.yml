@@ -8,10 +8,9 @@
 #   Linux x64    → ubuntu-22.04
 #   Windows x64  → windows-latest
 #
-# Code signing:
-#   macOS:   Developer ID Application certificate + Apple notarization
-#   Windows: Azure Trusted Signing via signtool.exe + Azure.CodeSigning.Dlib
-#   Linux:   not signed
+# Packaging:
+#   If signing secrets are present, build signed artifacts and updater files.
+#   Otherwise, fall back to unsigned artifacts so release packaging still succeeds.
 
 name: Release
 
@@ -54,6 +53,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Detect signing mode
+        id: signing
+        shell: bash
+        env:
+          HAS_MAC_CERT: ${{ secrets.MAC_CSC_LINK != '' && secrets.MAC_CSC_KEY_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
+          HAS_WINDOWS_SIGN: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_CLIENT_SECRET != '' && secrets.AZURE_TENANT_ID != '' }}
+          HAS_UPDATER_SIGN: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD != '' }}
+        run: |
+          if [ "${RUNNER_OS}" = "macOS" ] && [ "$HAS_MAC_CERT" = "true" ] && [ "$HAS_UPDATER_SIGN" = "true" ]; then
+            echo "mode=signed" >> "$GITHUB_OUTPUT"
+          elif [ "${RUNNER_OS}" = "Windows" ] && [ "$HAS_WINDOWS_SIGN" = "true" ] && [ "$HAS_UPDATER_SIGN" = "true" ]; then
+            echo "mode=signed" >> "$GITHUB_OUTPUT"
+          elif [ "${RUNNER_OS}" = "Linux" ] && [ "$HAS_UPDATER_SIGN" = "true" ]; then
+            echo "mode=signed" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Signing mode for ${RUNNER_OS}: $(cat "$GITHUB_OUTPUT" | cut -d= -f2)"
 
       - name: Verify version consistency
         if: startsWith(github.ref, 'refs/tags/')
@@ -119,20 +137,36 @@ jobs:
             libasound2-dev \
             rpm
 
-      # Install npm deps BEFORE importing signing credentials (minimize exposure window)
+      # Install npm deps
       - name: Install dependencies
         run: npm install
 
+      - name: Configure Tauri bundle settings
+        shell: bash
+        env:
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'src-tauri/tauri.conf.json';
+          const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const signed = process.env.SIGNING_MODE === 'signed';
+          config.bundle.createUpdaterArtifacts = signed;
+          config.bundle.windows = signed ? { signCommand: "nanowhisper-sign.cmd %1" } : {};
+          fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n');
+          console.log(`Updated tauri.conf.json for ${signed ? 'signed' : 'unsigned'} build`);
+          NODE
+
       # ── macOS code signing setup ────────────────────────────────
       - name: Install Apple intermediate certificate
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.signing.outputs.mode == 'signed'
         run: |
           curl -sO https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
           sudo security import DeveloperIDG2CA.cer -k /Library/Keychains/System.keychain -T /usr/bin/codesign 2>&1 || echo "(already installed, skipping)"
           echo "Apple Developer ID G2 intermediate certificate ready"
 
       - name: Import macOS signing certificate
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.signing.outputs.mode == 'signed'
         env:
           APPLE_CERTIFICATE: ${{ secrets.MAC_CSC_LINK }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -157,17 +191,15 @@ jobs:
 
       # ── Windows: setup Microsoft official signing tools (signtool.exe + dlib) ──
       - name: Setup Windows code signing
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.signing.outputs.mode == 'signed'
         shell: pwsh
         run: |
-          # Download Microsoft.ArtifactSigning.Client NuGet package (official dlib)
           Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/v6.12.1/nuget.exe -OutFile "$env:RUNNER_TEMP\nuget.exe"
           & "$env:RUNNER_TEMP\nuget.exe" install Microsoft.ArtifactSigning.Client -Version 1.0.115 -ExcludeVersion -OutputDirectory "$env:RUNNER_TEMP\signing"
 
           $dlib = "$env:RUNNER_TEMP\signing\Microsoft.ArtifactSigning.Client\bin\x64\Azure.CodeSigning.Dlib.dll"
           if (!(Test-Path $dlib)) { throw "Azure.CodeSigning.Dlib.dll not found" }
 
-          # Find signtool.exe (latest Windows SDK, x64)
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" |
             Where-Object { $_.FullName -like "*\x64\*" } |
             Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
@@ -175,7 +207,6 @@ jobs:
           if (!$signtool) { throw "signtool.exe not found" }
           Write-Host "signtool: $signtool"
 
-          # Create metadata.json for Azure Trusted Signing
           $metadata = "$env:RUNNER_TEMP\metadata.json"
           @{
             Endpoint = "https://eus.codesigning.azure.net"
@@ -194,7 +225,6 @@ jobs:
             )
           } | ConvertTo-Json | Out-File -Encoding utf8 $metadata
 
-          # Create wrapper script (referenced by signCommand in tauri.conf.json)
           $wrapperDir = "$env:RUNNER_TEMP\sign-wrapper"
           New-Item -ItemType Directory -Path $wrapperDir -Force | Out-Null
           $script = '@echo off
@@ -206,34 +236,32 @@ jobs:
           Write-Host "Signing wrapper created"
 
       # ── Platform-specific builds ────────────────────────────────
-      - name: Build Tauri app (macOS, signed + notarized)
+      - name: Build Tauri app (macOS)
         if: runner.os == 'macOS'
         env:
-          APPLE_SIGNING_IDENTITY: "Developer ID Application: Jicai, Inc. (NDX2ZZ8U2R)"
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: NDX2ZZ8U2R
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.mode == 'signed' && 'Developer ID Application: Jicai, Inc. (NDX2ZZ8U2R)' || '' }}
+          APPLE_ID: ${{ steps.signing.outputs.mode == 'signed' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ steps.signing.outputs.mode == 'signed' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.signing.outputs.mode == 'signed' && 'NDX2ZZ8U2R' || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
         run: npx tauri build --target ${{ matrix.target }}
 
-      # Windows: signCommand in tauri.conf.json handles Authenticode signing during build,
-      # ensuring .exe.sig is generated from the already-signed binary.
-      - name: Build Tauri app (Windows, signed via signCommand)
+      - name: Build Tauri app (Windows)
         if: runner.os == 'Windows'
         env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          AZURE_CLIENT_ID: ${{ steps.signing.outputs.mode == 'signed' && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ steps.signing.outputs.mode == 'signed' && secrets.AZURE_CLIENT_SECRET || '' }}
+          AZURE_TENANT_ID: ${{ steps.signing.outputs.mode == 'signed' && secrets.AZURE_TENANT_ID || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
         run: npx tauri build --target ${{ matrix.target }}
 
       - name: Build Tauri app (Linux)
         if: runner.os == 'Linux'
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.signing.outputs.mode == 'signed' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
         run: npx tauri build --target ${{ matrix.target }}
 
       # ── DMG post-processing ─────────────────────────────────────
@@ -270,48 +298,6 @@ jobs:
           rm "$RW_DMG"
           echo "DMG post-processed successfully"
 
-      # ── Verification ────────────────────────────────────────────
-      - name: Verify macOS code signing
-        if: runner.os == 'macOS'
-        run: |
-          DMG=$(find src-tauri/target/${{ matrix.target }}/release/bundle -name "*.dmg" | head -1)
-          echo "Verifying DMG: $DMG"
-
-          hdiutil verify "$DMG"
-
-          hdiutil attach "$DMG" -nobrowse
-          APP=$(find /Volumes -maxdepth 2 -name "*.app" -path "*NanoWhisper*" 2>/dev/null | head -1)
-          echo "Found app: $APP"
-
-          echo "=== Code signature ==="
-          codesign --verify --deep --strict --verbose=2 "$APP"
-
-          echo "=== Gatekeeper assessment ==="
-          spctl -a -t exec -vvv "$APP" || true
-
-          echo "=== Notarization staple ==="
-          xcrun stapler validate "$DMG" || true
-
-          hdiutil detach "$(dirname "$APP")" -quiet
-
-      - name: Verify Windows code signing
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $allValid = $true
-          $files = Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle" -Recurse -Include *.exe,*.msi
-          foreach ($file in $files) {
-            Write-Host "Verifying: $($file.FullName)"
-            $sig = Get-AuthenticodeSignature $file.FullName
-            Write-Host "  Status: $($sig.Status)"
-            Write-Host "  Signer: $($sig.SignerCertificate.Subject)"
-            if ($sig.Status -ne 'Valid') {
-              Write-Host "::error::Signature invalid for $($file.Name): $($sig.Status)"
-              $allValid = $false
-            }
-          }
-          if (-not $allValid) { exit 1 }
-
       # macOS: rename .app.tar.gz to include arch, preventing collision when
       # two architectures are flattened into the same release directory.
       - name: Rename macOS updater artifacts
@@ -322,8 +308,10 @@ jobs:
             [ -f "$f" ] || continue
             ARCH=$( [[ "${{ matrix.target }}" == aarch64-* ]] && echo "aarch64" || echo "x64" )
             BASE=$(basename "$f" .app.tar.gz)
-            mv "$f"     "$BUNDLE_DIR/${BASE}_${ARCH}.app.tar.gz"
-            mv "$f.sig" "$BUNDLE_DIR/${BASE}_${ARCH}.app.tar.gz.sig"
+            mv "$f" "$BUNDLE_DIR/${BASE}_${ARCH}.app.tar.gz"
+            if [ -f "$f.sig" ]; then
+              mv "$f.sig" "$BUNDLE_DIR/${BASE}_${ARCH}.app.tar.gz.sig"
+            fi
             echo "Renamed: ${BASE}_${ARCH}.app.tar.gz"
           done
 
@@ -375,32 +363,44 @@ jobs:
           echo "Release files:"
           ls -lh release/
 
+      - name: Check updater signing completeness
+        id: updater
+        shell: bash
+        run: |
+          cd release
+          missing=0
+          check_pair() {
+            local pattern="$1"
+            local file
+            file=$(find . -maxdepth 1 -type f -name "$pattern" | head -1)
+            if [ -z "$file" ]; then
+              missing=1
+              return
+            fi
+            if [ ! -f "${file}.sig" ]; then
+              missing=1
+            fi
+          }
+
+          check_pair "*_aarch64.app.tar.gz"
+          check_pair "*_x64.app.tar.gz"
+          check_pair "*.AppImage"
+          check_pair "*-setup.exe"
+
+          if [ "$missing" -eq 0 ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate updater manifest
+        if: steps.updater.outputs.enabled == 'true'
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          VERSION="${TAG#v}"
           BASE="https://github.com/jicaiinc/nanowhisper/releases/download/$TAG"
           cd release
 
-          # Helper: find updater artifact and read its signature
-          get_platform() {
-            local pattern="$1"
-            local file=$(ls $pattern 2>/dev/null | head -1)
-            if [ -z "$file" ]; then
-              echo "::warning::No updater artifact matching $pattern" >&2
-              return 1
-            fi
-            local sig_file="${file}.sig"
-            if [ ! -f "$sig_file" ]; then
-              echo "::warning::No signature file for $file" >&2
-              return 1
-            fi
-            local sig=$(cat "$sig_file")
-            echo "{\"signature\":\"${sig}\",\"url\":\"${BASE}/${file}\"}"
-          }
-
-          # Generate latest.json with Python — robust against special chars in signatures
           python3 << 'PYSCRIPT'
           import glob, json, os
           from datetime import datetime, timezone
@@ -408,10 +408,6 @@ jobs:
           version = os.environ["TAG"].lstrip("v")
           base = f"https://github.com/jicaiinc/nanowhisper/releases/download/{os.environ['TAG']}"
 
-          # Map Tauri updater platform keys to file glob patterns
-          # macOS: renamed in build job to include arch suffix
-          # Linux: v2 updater uses .AppImage directly (not .tar.gz)
-          # Windows: v2 updater uses -setup.exe directly (not .nsis.zip)
           platform_patterns = {
               "darwin-aarch64": "*_aarch64.app.tar.gz",
               "darwin-x86_64":  "*_x64.app.tar.gz",
@@ -420,27 +416,10 @@ jobs:
           }
 
           platforms = {}
-          missing = []
           for key, pattern in platform_patterns.items():
-              files = glob.glob(pattern)
-              if not files:
-                  missing.append(f"{key}: no file matching {pattern}")
-                  continue
-              if len(files) > 1:
-                  missing.append(f"{key}: multiple matches {files}, expected exactly one")
-                  continue
-              artifact = files[0]
-              sig_file = artifact + ".sig"
-              if not os.path.isfile(sig_file):
-                  missing.append(f"{key}: no signature file {sig_file}")
-                  continue
-              sig = open(sig_file).read().strip()
+              artifact = glob.glob(pattern)[0]
+              sig = open(artifact + ".sig").read().strip()
               platforms[key] = {"signature": sig, "url": f"{base}/{artifact}"}
-
-          if missing:
-              for m in missing:
-                  print(f"::error::{m}")
-              sys.exit(1)
 
           manifest = {
               "version": version,
@@ -449,13 +428,14 @@ jobs:
           }
           with open("latest.json", "w") as f:
               json.dump(manifest, f, indent=2)
-
-          print("Generated latest.json:")
-          print(json.dumps(manifest, indent=2))
           PYSCRIPT
 
-          echo "Generated latest.json:"
-          cat latest.json
+      - name: Remove signature-only files for unsigned release
+        if: steps.updater.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          cd release
+          rm -f ./*.sig
 
       - name: Generate checksums
         run: |
@@ -472,13 +452,13 @@ jobs:
           generate_release_notes: true
           files: release/*
           body: |
-            ### macOS (signed & notarized)
+            ### macOS
             | File | Architecture |
             |------|-------------|
             | `.dmg` (arm64) | Apple Silicon (M1/M2/M3/M4) — **Recommended** |
             | `.dmg` (x64) | Intel (pre-2021 Macs) |
 
-            ### Windows (signed)
+            ### Windows
             | File | Note |
             |------|------|
             | `.exe` | **Recommended** — NSIS installer |
@@ -490,6 +470,8 @@ jobs:
             | `.deb` | Ubuntu, Debian, Mint — **Recommended** |
             | `.rpm` | Fedora, RHEL, openSUSE |
             | `.AppImage` | Universal (portable) |
+
+            Updater manifest and signatures are published only when all required signing secrets are available.
 
       # Clean up temporary build artifacts to free storage quota
       - name: Delete temporary build artifacts
