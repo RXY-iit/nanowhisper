@@ -299,6 +299,44 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .download-table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.58);
+        border: 1px solid var(--line);
+      }
+
+      .download-table th,
+      .download-table td {
+        padding: 14px 16px;
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .download-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .download-table th {
+        color: var(--muted);
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .download-tag {
+        display: inline-flex;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(31, 111, 235, 0.1);
+        color: var(--accent-strong);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
       .footer {
         margin-top: 22px;
         color: var(--muted);
@@ -427,6 +465,66 @@
               <p>Use the EXE or MSI on Windows, and DEB, RPM, or AppImage on Linux.</p>
             </div>
           </div>
+          <div style="height: 14px"></div>
+          <table class="download-table">
+            <thead>
+              <tr>
+                <th>Platform</th>
+                <th>Recommended File</th>
+                <th>Use Case</th>
+                <th>Open</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>macOS Apple Silicon</td>
+                <td><span class="download-tag">DMG (arm64)</span></td>
+                <td>M1 / M2 / M3 / M4 Mac</td>
+                <td><a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Open latest release</a></td>
+              </tr>
+              <tr>
+                <td>macOS Intel</td>
+                <td><span class="download-tag">DMG (x64)</span></td>
+                <td>Older Intel Mac</td>
+                <td><a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Open latest release</a></td>
+              </tr>
+              <tr>
+                <td>Windows</td>
+                <td><span class="download-tag">EXE</span></td>
+                <td>Most users should use the installer EXE</td>
+                <td><a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Open latest release</a></td>
+              </tr>
+              <tr>
+                <td>Windows</td>
+                <td><span class="download-tag">MSI</span></td>
+                <td>Enterprise or managed deployment</td>
+                <td><a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Open latest release</a></td>
+              </tr>
+              <tr>
+                <td>Linux Debian / Ubuntu</td>
+                <td><span class="download-tag">DEB</span></td>
+                <td>Ubuntu, Debian, Mint</td>
+                <td><a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Open latest release</a></td>
+              </tr>
+              <tr>
+                <td>Linux Fedora / RHEL</td>
+                <td><span class="download-tag">RPM</span></td>
+                <td>Fedora, RHEL, openSUSE</td>
+                <td><a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Open latest release</a></td>
+              </tr>
+              <tr>
+                <td>Linux Universal</td>
+                <td><span class="download-tag">AppImage</span></td>
+                <td>Portable option across many distros</td>
+                <td><a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Open latest release</a></td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="margin: 14px 0 0; color: var(--muted); line-height: 1.7; font-size: 14px;">
+            GitHub Actions artifacts are temporary build outputs and may require sign-in. Public download pages should point to
+            <a href="https://github.com/RXY-iit/nanowhisper/releases/latest" style="text-decoration: underline;">GitHub Releases</a>.
+            Once you have stable release asset URLs, this page can be updated again to link each file directly.
+          </p>
         </section>
 
         <section class="section">
