@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/RXY-iit/nanowhisper/releases/latest">ダウンロード</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.27">v0.1.27 リリース</a>
+  <a href="https://rxy-iit.github.io/nanowhisper/">ダウンロードページ</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.27">v0.1.27 リリース</a>
 </p>
 
 <p align="center">
