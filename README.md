@@ -44,7 +44,7 @@ Powered by OpenAI Whisper API and Google Gemini API. Built with Tauri v2.
 - **History** — All transcriptions saved locally with audio files for retry.
 - **System Tray** — Runs quietly in the background.
 
-## New in v0.1.26
+## New in v0.1.27
 
 - Added `Translate Mode` with default shortcut `Ctrl+T`
 - Added `Modify Mode` with default shortcut `Ctrl+O`
