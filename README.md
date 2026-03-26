@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Download</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.28">v0.1.28 Release</a>
+  <a href="https://github.com/RXY-iit/nanowhisper/releases/latest">Download</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.27">v0.1.27 Release</a>
 </p>
 
 <p align="center">
