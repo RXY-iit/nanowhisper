@@ -12,6 +12,7 @@ mod updater;
 use history::HistoryManager;
 use recorder::{encode_wav, AudioRecorder};
 use settings::AppSettings;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -95,21 +96,30 @@ fn macos_cursor_screen_bounds() -> Option<(f64, f64, f64, f64)> {
 
     #[repr(C)]
     #[derive(Copy, Clone)]
-    struct CGPoint { x: f64, y: f64 }
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
     unsafe impl Encode for CGPoint {
         const ENCODING: Encoding =
             Encoding::Struct("CGPoint", &[Encoding::Double, Encoding::Double]);
     }
     #[repr(C)]
     #[derive(Copy, Clone)]
-    struct CGSize { width: f64, height: f64 }
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
     unsafe impl Encode for CGSize {
         const ENCODING: Encoding =
             Encoding::Struct("CGSize", &[Encoding::Double, Encoding::Double]);
     }
     #[repr(C)]
     #[derive(Copy, Clone)]
-    struct CGRect { origin: CGPoint, size: CGSize }
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
+    }
     unsafe impl Encode for CGRect {
         const ENCODING: Encoding =
             Encoding::Struct("CGRect", &[CGPoint::ENCODING, CGSize::ENCODING]);
@@ -119,7 +129,9 @@ fn macos_cursor_screen_bounds() -> Option<(f64, f64, f64, f64)> {
         let mouse: CGPoint = msg_send![AnyClass::get(c"NSEvent")?, mouseLocation];
         let screens: *mut AnyObject = msg_send![AnyClass::get(c"NSScreen")?, screens];
         let count: usize = msg_send![screens, count];
-        if count == 0 { return None; }
+        if count == 0 {
+            return None;
+        }
 
         // Main screen height for Y-axis flip (macOS bottom-left → Tauri top-left)
         let main: *mut AnyObject = msg_send![screens, objectAtIndex: 0usize];
@@ -244,10 +256,9 @@ pub fn run() {
             let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
             let menu = tauri::menu::Menu::with_items(app, &[&show_i, &separator, &quit_i])?;
 
-            let tray_icon = tauri::image::Image::from_bytes(
-                include_bytes!("../icons/tray-icon.png"),
-            )
-            .expect("Failed to load tray icon");
+            let tray_icon =
+                tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+                    .expect("Failed to load tray icon");
 
             tauri::tray::TrayIconBuilder::new()
                 .icon(tray_icon)
@@ -268,27 +279,29 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Start native hotkey monitor (Right Command on macOS, Right Ctrl on Windows)
-            // hotkey.rs already has its own 500ms debounce, so we only need the CAS guard here.
-            let hotkey_handle = app_handle.clone();
-            hotkey::start(move || {
-                if SHORTCUT_PROCESSING
-                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_err()
-                {
-                    return;
-                }
-
-                log::info!("Native hotkey triggered");
-                let h = hotkey_handle.clone();
-                std::thread::spawn(move || {
-                    toggle_recording(&h, RecordingMode::Transcribe);
-                    SHORTCUT_PROCESSING.store(false, Ordering::SeqCst);
-                });
-            });
-
-            // Register global shortcut (secondary, user-configurable)
             let settings = settings::get_settings();
+            if settings.native_hotkey_enabled {
+                // Start native hotkey monitor (Right Command on macOS, Right Ctrl on Windows)
+                // hotkey.rs already has its own 500ms debounce, so we only need the CAS guard here.
+                let hotkey_handle = app_handle.clone();
+                hotkey::start(move || {
+                    if SHORTCUT_PROCESSING
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
+                        return;
+                    }
+
+                    log::info!("Native hotkey triggered");
+                    let h = hotkey_handle.clone();
+                    std::thread::spawn(move || {
+                        toggle_recording(&h, RecordingMode::Transcribe);
+                        SHORTCUT_PROCESSING.store(false, Ordering::SeqCst);
+                    });
+                });
+            }
+
+            // Register global shortcuts
             register_shortcut(&app_handle, &settings);
 
             // Show main window
@@ -305,6 +318,10 @@ pub fn run() {
                 settings.shortcut,
                 settings.translate_shortcut,
                 settings.modify_shortcut
+            );
+            log::info!(
+                "Native single-key hotkey enabled: {}",
+                settings.native_hotkey_enabled
             );
             let active_key_set = if settings.provider == "gemini" {
                 !settings.gemini_api_key.is_empty()
@@ -345,6 +362,8 @@ static LAST_SHORTCUT_TIME: AtomicU64 = AtomicU64::new(0);
 const DEBOUNCE_MS: u64 = 500;
 
 pub fn register_shortcut(app_handle: &tauri::AppHandle, settings: &AppSettings) {
+    let mut seen = HashSet::new();
+
     for (shortcut_str, mode) in configured_shortcuts(settings) {
         let shortcut: Shortcut = match shortcut_str.parse() {
             Ok(s) => s,
@@ -354,36 +373,47 @@ pub fn register_shortcut(app_handle: &tauri::AppHandle, settings: &AppSettings) 
             }
         };
 
+        if !seen.insert(shortcut_str.to_string()) {
+            log::warn!(
+                "Duplicate shortcut '{}', skipping repeated registration",
+                shortcut_str
+            );
+            continue;
+        }
+
+        let _ = app_handle.global_shortcut().unregister(shortcut);
+
         let handle = app_handle.clone();
-        let _ = app_handle
-            .global_shortcut()
-            .on_shortcut(shortcut, move |_app, _shortcut, event| {
-                if event.state == ShortcutState::Pressed {
-                    let now = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_millis() as u64;
-                    let last = LAST_SHORTCUT_TIME.load(Ordering::SeqCst);
-                    if now - last < DEBOUNCE_MS {
-                        return;
-                    }
-                    LAST_SHORTCUT_TIME.store(now, Ordering::SeqCst);
+        let _ =
+            app_handle
+                .global_shortcut()
+                .on_shortcut(shortcut, move |_app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let now = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as u64;
+                        let last = LAST_SHORTCUT_TIME.load(Ordering::SeqCst);
+                        if now - last < DEBOUNCE_MS {
+                            return;
+                        }
+                        LAST_SHORTCUT_TIME.store(now, Ordering::SeqCst);
 
-                    if SHORTCUT_PROCESSING
-                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                        .is_err()
-                    {
-                        return;
-                    }
+                        if SHORTCUT_PROCESSING
+                            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                            .is_err()
+                        {
+                            return;
+                        }
 
-                    log::info!("Shortcut triggered for mode={}", mode.as_str());
-                    let h = handle.clone();
-                    std::thread::spawn(move || {
-                        toggle_recording(&h, mode);
-                        SHORTCUT_PROCESSING.store(false, Ordering::SeqCst);
-                    });
-                }
-            });
+                        log::info!("Shortcut triggered for mode={}", mode.as_str());
+                        let h = handle.clone();
+                        std::thread::spawn(move || {
+                            toggle_recording(&h, mode);
+                            SHORTCUT_PROCESSING.store(false, Ordering::SeqCst);
+                        });
+                    }
+                });
     }
 }
 
@@ -412,7 +442,10 @@ fn configured_shortcuts(settings: &AppSettings) -> Vec<(&str, RecordingMode)> {
         shortcuts.push((settings.shortcut.as_str(), RecordingMode::Transcribe));
     }
     if !settings.translate_shortcut.is_empty() {
-        shortcuts.push((settings.translate_shortcut.as_str(), RecordingMode::Translate));
+        shortcuts.push((
+            settings.translate_shortcut.as_str(),
+            RecordingMode::Translate,
+        ));
     }
     if !settings.modify_shortcut.is_empty() {
         shortcuts.push((settings.modify_shortcut.as_str(), RecordingMode::Modify));
@@ -466,7 +499,10 @@ fn start_recording(app_handle: &tauri::AppHandle, mode: RecordingMode) {
     let (pos_x, pos_y) = if let (Some(rx), Some(ry)) = (saved.overlay_rx, saved.overlay_ry) {
         (sx + rx * sw, sy + ry * sh)
     } else {
-        (sx + (sw - OVERLAY_WIDTH) / 2.0, sy + sh - OVERLAY_HEIGHT - OVERLAY_BOTTOM_OFFSET)
+        (
+            sx + (sw - OVERLAY_WIDTH) / 2.0,
+            sy + sh - OVERLAY_HEIGHT - OVERLAY_BOTTOM_OFFSET,
+        )
     };
 
     // Hide main window to prevent it from appearing when overlay activates the app
@@ -626,7 +662,12 @@ fn stop_and_transcribe(app_handle: &tauri::AppHandle) {
     let mode_str = mode.as_str().to_string();
     let context_text_for_history = context_text.clone();
 
-    log::info!("Calling {} API with model={} mode={}...", provider, model, mode_str);
+    log::info!(
+        "Calling {} API with model={} mode={}...",
+        provider,
+        model,
+        mode_str
+    );
 
     tauri::async_runtime::spawn(async move {
         let lang = if language == "auto" {
@@ -807,7 +848,8 @@ fn restore_captured_focus(target: Option<FocusTarget>) {
         let Some(app_cls) = app_cls else {
             return;
         };
-        let app: *mut AnyObject = msg_send![app_cls, runningApplicationWithProcessIdentifier: target.pid];
+        let app: *mut AnyObject =
+            msg_send![app_cls, runningApplicationWithProcessIdentifier: target.pid];
         if app.is_null() {
             return;
         }

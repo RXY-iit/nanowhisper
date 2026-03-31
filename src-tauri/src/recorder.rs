@@ -5,6 +5,7 @@ use std::io::Cursor;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 pub struct RecordedAudio {
@@ -105,33 +106,45 @@ impl AudioRecorder {
             }
 
             let mut buffer: Vec<f32> = Vec::new();
+            let mut level_window: Vec<f32> = Vec::with_capacity(512);
+            let mut last_level_emit = Instant::now();
 
-            let drain_audio =
-                |audio_rx: &mpsc::Receiver<Vec<f32>>,
-                 buffer: &mut Vec<f32>,
-                 app_handle: &AppHandle| {
-                    while let Ok(chunk) = audio_rx.try_recv() {
-                        buffer.extend_from_slice(&chunk);
+            let handle_chunk = |chunk: Vec<f32>,
+                                buffer: &mut Vec<f32>,
+                                level_window: &mut Vec<f32>,
+                                last_level_emit: &mut Instant,
+                                app_handle: &AppHandle| {
+                buffer.extend_from_slice(&chunk);
+                level_window.extend_from_slice(&chunk);
 
-                        if buffer.len() % 512 < chunk.len() {
-                            let recent = &buffer[buffer.len().saturating_sub(512)..];
-                            let rms = (recent.iter().map(|s| s * s).sum::<f32>()
-                                / recent.len() as f32)
-                                .sqrt();
-                            let _ = app_handle.emit("audio-level", rms.min(1.0));
-                        }
-                    }
-                };
+                if level_window.len() > 512 {
+                    let excess = level_window.len() - 512;
+                    level_window.drain(..excess);
+                }
+
+                if level_window.len() >= 128
+                    && last_level_emit.elapsed() >= Duration::from_millis(33)
+                {
+                    let rms = (level_window.iter().map(|s| s * s).sum::<f32>()
+                        / level_window.len() as f32)
+                        .sqrt();
+                    let _ = app_handle.emit("audio-level", rms.min(1.0));
+                    *last_level_emit = Instant::now();
+                }
+            };
 
             loop {
-                // Drain audio data
-                drain_audio(&audio_rx, &mut buffer, &app_handle);
-
-                // Check commands (blocking with timeout instead of polling)
-                match cmd_rx.recv_timeout(std::time::Duration::from_millis(5)) {
+                match cmd_rx.try_recv() {
                     Ok(Cmd::Stop(reply)) => {
-                        // Drain remaining audio before returning
-                        drain_audio(&audio_rx, &mut buffer, &app_handle);
+                        while let Ok(chunk) = audio_rx.try_recv() {
+                            handle_chunk(
+                                chunk,
+                                &mut buffer,
+                                &mut level_window,
+                                &mut last_level_emit,
+                                &app_handle,
+                            );
+                        }
                         *is_recording.lock().unwrap() = false;
                         let audio = RecordedAudio {
                             samples: std::mem::take(&mut buffer),
@@ -143,6 +156,29 @@ impl AudioRecorder {
                     Ok(Cmd::Cancel) => {
                         *is_recording.lock().unwrap() = false;
                         break;
+                    }
+                    Err(mpsc::TryRecvError::Empty) => {}
+                    Err(mpsc::TryRecvError::Disconnected) => break,
+                }
+
+                match audio_rx.recv_timeout(Duration::from_millis(100)) {
+                    Ok(chunk) => {
+                        handle_chunk(
+                            chunk,
+                            &mut buffer,
+                            &mut level_window,
+                            &mut last_level_emit,
+                            &app_handle,
+                        );
+                        while let Ok(chunk) = audio_rx.try_recv() {
+                            handle_chunk(
+                                chunk,
+                                &mut buffer,
+                                &mut level_window,
+                                &mut last_level_emit,
+                                &app_handle,
+                            );
+                        }
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {}
                     Err(mpsc::RecvTimeoutError::Disconnected) => break,

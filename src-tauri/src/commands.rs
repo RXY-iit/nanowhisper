@@ -6,7 +6,6 @@ use crate::updater;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 #[tauri::command]
 pub fn get_history(history: State<'_, Arc<HistoryManager>>) -> Result<Vec<HistoryEntry>, String> {
@@ -35,6 +34,14 @@ pub fn get_settings() -> AppSettings {
 pub fn save_settings(app: AppHandle, settings: AppSettings) {
     let old_settings = settings::get_settings();
     settings::save_settings(&settings);
+
+    if settings.native_hotkey_enabled != old_settings.native_hotkey_enabled {
+        if settings.native_hotkey_enabled {
+            crate::hotkey::resume();
+        } else {
+            crate::hotkey::pause();
+        }
+    }
 
     // Hot-reload shortcut if changed
     if settings.shortcut != old_settings.shortcut
@@ -66,7 +73,11 @@ pub fn request_microphone() -> bool {
 }
 
 #[tauri::command]
-pub async fn validate_api_key(app: AppHandle, api_key: String, provider: String) -> Result<(), String> {
+pub async fn validate_api_key(
+    app: AppHandle,
+    api_key: String,
+    provider: String,
+) -> Result<(), String> {
     let client = app
         .try_state::<reqwest::Client>()
         .ok_or("HTTP client not initialized")?;
@@ -92,6 +103,7 @@ pub fn pause_shortcut(app: AppHandle) {
 pub fn resume_shortcut(app: AppHandle) {
     crate::hotkey::resume();
     let settings = settings::get_settings();
+    crate::unregister_shortcuts(&app, &settings);
     crate::register_shortcut(&app, &settings);
     log::info!("Shortcuts resumed");
 }
@@ -141,7 +153,11 @@ pub async fn retry_transcription(
 
     let settings = crate::settings::get_settings();
     let is_gemini = settings.provider == "gemini";
-    let active_key = if is_gemini { &settings.gemini_api_key } else { &settings.api_key };
+    let active_key = if is_gemini {
+        &settings.gemini_api_key
+    } else {
+        &settings.api_key
+    };
     if active_key.is_empty() {
         return Err("API key not configured".into());
     }

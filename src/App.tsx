@@ -29,7 +29,7 @@ const DEFAULT_MODELS: Record<string, string> = {
 };
 
 function displayShortcut(s: string): string {
-  if (!s) return defaultHotkey;
+  if (!s) return "Not set";
   return s
     .replace("CmdOrCtrl", modKey)
     .replace("Cmd", "⌘")
@@ -37,6 +37,12 @@ function displayShortcut(s: string): string {
     .replace("Shift", "⇧")
     .replace("Alt", isMac ? "⌥" : "Alt")
     .replace(/\+/g, " ");
+}
+
+function mainShortcutLabel(settings: AppSettings | null): string {
+  if (!settings) return defaultHotkey;
+  if (settings.native_hotkey_enabled) return defaultHotkey;
+  return displayShortcut(settings.shortcut);
 }
 
 /** Map KeyboardEvent.code to Tauri shortcut key name */
@@ -323,7 +329,12 @@ function App() {
 
   // Onboarding
   if (view === "onboarding" && settings) {
-    const canProceed = apiKeyStatus === "ok" && microphoneOk && (isMac ? accessibilityOk : true);
+    const hasMainTrigger = settings.native_hotkey_enabled || !!settings.shortcut;
+    const canProceed =
+      apiKeyStatus === "ok" &&
+      microphoneOk &&
+      (isMac ? accessibilityOk : true) &&
+      hasMainTrigger;
     return (
       <div className="p-6 max-w-md mx-auto">
         <div className="flex flex-col items-center mb-6">
@@ -450,10 +461,41 @@ function App() {
               <span className="text-sm font-medium">Shortcut</span>
             </div>
             <p className="text-xs mb-1.5" style={{ color: "var(--text-secondary)" }}>
-              Default: {defaultHotkey}. Press to record, again to stop. Escape to cancel.
+              Choose either the native single-key hotkey or a regular shortcut for the main action.
+            </p>
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+              <div>
+                <div className="text-sm">Use native single-key hotkey</div>
+                <div className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                  {defaultHotkey}. More convenient, but keeps a system keyboard monitor active.
+                </div>
+              </div>
+              <button
+                onClick={() => setSettings({ ...settings, native_hotkey_enabled: !settings.native_hotkey_enabled })}
+                className="relative w-10 h-5 rounded-full transition-colors"
+                style={{ background: settings.native_hotkey_enabled ? "var(--accent)" : "var(--border)" }}
+              >
+                <span
+                  className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                  style={{ left: settings.native_hotkey_enabled ? "calc(100% - 18px)" : "2px" }}
+                />
+              </button>
+            </div>
+            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+              Recommended: leave this off if you want the app to stay lighter in the background.
+            </p>
+            <p className="text-xs mt-2 mb-1.5" style={{ color: "var(--text-secondary)" }}>
+              Main shortcut {settings.native_hotkey_enabled ? "(optional fallback)" : "(required if native hotkey is off)"}:
             </p>
             <ShortcutInput shortcut={settings.shortcut} onCapture={(s) => setSettings({ ...settings, shortcut: s })} />
-            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>Optionally set a custom shortcut above.</p>
+            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+              {settings.native_hotkey_enabled ? "Optionally set a custom shortcut above." : "Set a custom shortcut above if you keep the native hotkey off."}
+            </p>
+            {!hasMainTrigger && (
+              <p className="text-xs mt-1" style={{ color: "#ff453a" }}>
+                Turn on the native single-key hotkey or set a main shortcut before continuing.
+              </p>
+            )}
             <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
               Translate: {displayShortcut(settings.translate_shortcut || defaultTranslateShortcut)}. Modify: {displayShortcut(settings.modify_shortcut || defaultModifyShortcut)}.
             </p>
@@ -569,9 +611,29 @@ function App() {
             </div>
           </div>
           <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs" style={{ color: "var(--text-secondary)" }}>Native Single-Key Hotkey</label>
+              <button
+                onClick={() => setSettings({ ...settings, native_hotkey_enabled: !settings.native_hotkey_enabled })}
+                className="relative w-10 h-5 rounded-full transition-colors"
+                style={{ background: settings.native_hotkey_enabled ? "var(--accent)" : "var(--border)" }}
+              >
+                <span
+                  className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                  style={{ left: settings.native_hotkey_enabled ? "calc(100% - 18px)" : "2px" }}
+                />
+              </button>
+            </div>
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              {defaultHotkey}. More convenient, but adds extra system-wide keyboard monitoring. Best left off if you want lower background overhead.
+            </p>
+          </div>
+          <div>
             <label className="block text-xs mb-1" style={{ color: "var(--text-secondary)" }}>Main Shortcut</label>
             <p className="text-xs mb-1.5" style={{ color: "var(--text-secondary)" }}>
-              Default: {defaultHotkey}
+              {settings.native_hotkey_enabled
+                ? `Current primary trigger: ${defaultHotkey}. You can also set a fallback shortcut below.`
+                : "Set a regular global shortcut for the main action."}
             </p>
             <ShortcutInput shortcut={settings.shortcut} onCapture={(s) => setSettings({ ...settings, shortcut: s })} />
             {settings.shortcut && (
@@ -582,6 +644,11 @@ function App() {
               >
                 Reset to default
               </button>
+            )}
+            {!settings.native_hotkey_enabled && !settings.shortcut && (
+              <p className="text-xs mt-1" style={{ color: "#ff453a" }}>
+                Main shortcut is currently not set.
+              </p>
             )}
           </div>
           <div>
@@ -701,7 +768,7 @@ function App() {
         <p className="text-center py-8 text-sm" style={{ color: "var(--text-secondary)" }}>
           No transcriptions yet.
           <br />
-          Press {displayShortcut(settings?.shortcut || "")} to start.
+          Press {mainShortcutLabel(settings)} to start.
           <br />
           <span className="text-xs">Translate: {displayShortcut(settings?.translate_shortcut || defaultTranslateShortcut)}. Modify: {displayShortcut(settings?.modify_shortcut || defaultModifyShortcut)}.</span>
         </p>

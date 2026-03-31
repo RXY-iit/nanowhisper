@@ -24,6 +24,8 @@ pub struct AppSettings {
     #[serde(default = "default_sound_enabled")]
     pub sound_enabled: bool,
     #[serde(default)]
+    pub native_hotkey_enabled: bool,
+    #[serde(default)]
     pub overlay_rx: Option<f64>,
     #[serde(default)]
     pub overlay_ry: Option<f64>,
@@ -70,6 +72,7 @@ impl Default for AppSettings {
             modify_shortcut: default_modify_shortcut(),
             translate_target_language: default_translate_target_language(),
             sound_enabled: default_sound_enabled(),
+            native_hotkey_enabled: false,
             overlay_rx: None,
             overlay_ry: None,
         }

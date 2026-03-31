@@ -85,22 +85,20 @@ mod platform {
 
     // NSEventMask values
     const NS_FLAGS_CHANGED_MASK: u64 = 1 << 12;
-    const NS_KEY_DOWN_MASK: u64 = 1 << 10;
 
     // Virtual key code for Right Command
     const K_VK_RIGHT_COMMAND: u16 = 0x36;
 
-    // NSEventModifierFlags — Command key bit
+    // NSEventModifierFlags
     const NS_COMMAND_KEY_MASK: u64 = 1 << 20;
+    const NS_DEVICE_INDEPENDENT_MODIFIER_FLAGS_MASK: u64 = 0xffff0000;
 
     static KEY_DOWN: AtomicBool = AtomicBool::new(false);
     static KEY_TIME: AtomicU64 = AtomicU64::new(0);
     static OTHER_KEY: AtomicBool = AtomicBool::new(false);
 
     /// Shared handler for both global and local monitors.
-    /// Works for both flagsChanged and keyDown events:
-    ///   - keyCode == 0x36 → Right Command press/release (flagsChanged)
-    ///   - any other keyCode while Right Cmd held → cancel solo tap
+    /// Uses only flagsChanged to avoid a global keyDown monitor on macOS.
     fn handle_event(event: &AnyObject) {
         let keycode: u16 = unsafe { msg_send![event, keyCode] };
         let flags: u64 = unsafe { msg_send![event, modifierFlags] };
@@ -120,16 +118,16 @@ mod platform {
                     trigger_callback();
                 }
             }
-        } else if KEY_DOWN.load(Ordering::SeqCst) {
-            // Another key/modifier pressed while Right Cmd held → not a solo tap
+        } else if KEY_DOWN.load(Ordering::SeqCst)
+            && (flags & NS_DEVICE_INDEPENDENT_MODIFIER_FLAGS_MASK) != 0
+        {
+            // Another modifier changed while Right Cmd is held.
             OTHER_KEY.store(true, Ordering::SeqCst);
         }
     }
 
     pub fn start() {
-        // flagsChanged: detects modifier key press/release (no special permissions)
-        // keyDown: detects regular keys pressed during hold (needs Accessibility)
-        let mask: u64 = NS_FLAGS_CHANGED_MASK | NS_KEY_DOWN_MASK;
+        let mask: u64 = NS_FLAGS_CHANGED_MASK;
 
         // Global monitor: fires when OTHER apps are focused
         let global_block = RcBlock::new(|event: NonNull<AnyObject>| {
@@ -217,12 +215,7 @@ mod platform {
     pub fn start() {
         std::thread::spawn(|| unsafe {
             let hmod = GetModuleHandleW(std::ptr::null());
-            let hook = SetWindowsHookExW(
-                WH_KEYBOARD_LL,
-                Some(hook_proc),
-                hmod,
-                0,
-            );
+            let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(hook_proc), hmod, 0);
             if hook.is_null() {
                 log::error!("Failed to install keyboard hook");
                 return;

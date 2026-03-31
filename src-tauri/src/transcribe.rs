@@ -137,7 +137,15 @@ pub async fn process_recorded_audio(
         }
         "modify" => {
             let source_text = context_text.context("No selected text captured for modify mode")?;
-            modify_text(client, provider, api_key, speech_model, source_text, &transcript).await?
+            modify_text(
+                client,
+                provider,
+                api_key,
+                speech_model,
+                source_text,
+                &transcript,
+            )
+            .await?
         }
         _ => transcript.clone(),
     };
@@ -176,11 +184,19 @@ async fn modify_text(
     source_text: &str,
     instruction: &str,
 ) -> Result<String> {
-    let prompt = format!(
-        "Rewrite the selected text using the spoken instruction. Keep the meaning of the instruction, and return only the rewritten text.\n\nSelected text:\n{}\n\nSpoken instruction:\n{}",
-        source_text.trim(),
-        instruction.trim()
-    );
+    let instruction = instruction.trim();
+    let prompt = if instruction.is_empty() {
+        format!(
+            "Polish the selected text without changing its meaning. Improve fluency, tighten awkward phrasing, and make the tone slightly more formal and professional. Keep the original language. Return only the rewritten text.\n\nSelected text:\n{}",
+            source_text.trim()
+        )
+    } else {
+        format!(
+            "Rewrite the selected text according to the spoken instruction. Preserve the original meaning unless the instruction explicitly asks for a change. Improve clarity and natural flow where helpful, keep the original language unless instructed otherwise, and return only the rewritten text.\n\nSelected text:\n{}\n\nSpoken instruction:\n{}",
+            source_text.trim(),
+            instruction
+        )
+    };
     if provider == "gemini" {
         generate_gemini_text(client, api_key, model, &prompt).await
     } else {
@@ -257,7 +273,10 @@ pub async fn validate_gemini_api_key(client: &reqwest::Client, api_key: &str) ->
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        if body.contains("API_KEY_INVALID") || body.contains("PERMISSION_DENIED") || status.as_u16() == 401 {
+        if body.contains("API_KEY_INVALID")
+            || body.contains("PERMISSION_DENIED")
+            || status.as_u16() == 401
+        {
             anyhow::bail!("Invalid API key");
         }
         anyhow::bail!("Gemini API error {}: {}", status, body);
@@ -291,7 +310,8 @@ pub async fn transcribe_gemini(
                 lang_name
             )
         }
-        _ => "Transcribe the following audio. Output only the transcribed text, nothing else.".to_string(),
+        _ => "Transcribe the following audio. Output only the transcribed text, nothing else."
+            .to_string(),
     };
 
     let body = serde_json::json!({

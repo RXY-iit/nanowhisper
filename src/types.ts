@@ -20,6 +20,7 @@ export interface AppSettings {
   modify_shortcut: string;
   translate_target_language: string;
   sound_enabled: boolean;
+  native_hotkey_enabled: boolean;
   overlay_rx: number | null;
   overlay_ry: number | null;
 }
