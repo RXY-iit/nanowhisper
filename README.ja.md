@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rxy-iit.github.io/nanowhisper/">ダウンロードページ</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.27">v0.1.27 リリース</a>
+  <a href="https://rxy-iit.github.io/nanowhisper/">ダウンロードページ</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.28">v0.1.28 リリース</a>
 </p>
 
 <p align="center">
@@ -44,7 +44,7 @@ OpenAI Whisper API と Google Gemini API を利用し、Tauri v2 で構築され
 - **履歴** — 音声ファイル付きで履歴をローカル保存し、再試行できます
 - **システムトレイ** — バックグラウンドで静かに常駐します
 
-## v0.1.27 の新機能
+## v0.1.28 の新機能
 
 - `翻訳モード` を追加。デフォルトショートカットは `Ctrl+T`
 - `修正モード` を追加。デフォルトショートカットは `Ctrl+O`

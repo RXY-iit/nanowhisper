@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rxy-iit.github.io/nanowhisper/">Downloads</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.27">v0.1.27 Release</a>
+  <a href="https://rxy-iit.github.io/nanowhisper/">Downloads</a> · <a href="https://github.com/RXY-iit/nanowhisper/releases/tag/v0.1.28">v0.1.28 Release</a>
 </p>
 
 <p align="center">
@@ -44,7 +44,7 @@ Powered by OpenAI Whisper API and Google Gemini API. Built with Tauri v2.
 - **History** — All transcriptions saved locally with audio files for retry.
 - **System Tray** — Runs quietly in the background.
 
-## New in v0.1.27
+## New in v0.1.28
 
 - Added `Translate Mode` with default shortcut `Ctrl+T`
 - Added `Modify Mode` with default shortcut `Ctrl+O`
